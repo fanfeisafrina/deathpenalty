@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>D3: Setting path fills dynamically to generate a choropleth</title>
+		<script type="text/javascript" src="d3.v3.js"></script>
+		<script src="d3tooltip.js"></script>
+
+		<style type="text/css">
+
+		.tooltip{ 
+			background-color:rgba(240,240,240,0.5);
+			margin: 10px;
+			height: 50px;
+			width: 90px;
+			padding-top: 10px;
+			-webkit-border-radius:10px;
+			-moz-border-radius:10px;
+			border-radius:10px;
+			font-size: 0.8em;
+			text-align:center;
+		}
+
+		.tooltip span{
+			font-size:0.6em;
+		}
+
+		input{
+			position: absolute;
+			padding: 10px 15px 11px !important;
+			font-size: 12px !important;
+			background-color: #31A354;
+			color: #ffffff;
+			border-radius: 5px;
+			-moz-border-radius: 5px;
+			-webkit-border-radius: 5px;
+			border: 1px solid white;
+			cursor: pointer;
+			left:170px;
+			top:360px;
+		}
+
+		#since1976{
+			position: absolute;
+			padding: 10px 15px 11px !important;
+			font-size: 12px !important;
+			background-color: #006D2C;
+			color: #ffffff;
+			border-radius: 5px;
+			-moz-border-radius: 5px;
+			-webkit-border-radius: 5px;
+			border: 1px solid white;
+			cursor: pointer;
+			left:270px;
+			top:360px;
+
+		}	
+		.legend{
+			position: absolute;
+			left:300px;
+			top:50px;
+			width: 10%;
+		}
+
+		.legend label,
+		.legend span {
+			  display:block;
+			  float:right;
+			  height:15px;
+			  width:20%;
+			  text-align:center;
+			  font-size:7px;
+			  color:#808080;
+			  }
+
+		.legend small{
+			font-size:7px;
+		}
+
+		p{
+			position: absolute;
+			font-family: sans-serif;
+			font-size: 14px;
+			left:40px;
+		}
+
+		svg{
+			position: absolute;
+			top:80px;
+		}
+		</style>
+	</head>
+	<body>
+		<div id="option">
+		    <input name="updateButton" 
+		           type="button" 
+		           value="Before 1976" 
+		           onclick="updateData()" />
+		</div>
+
+		<div id="option">
+		    <input id="since1976" 
+		           type="button" 
+		           value="Since 1976" 
+		           onclick="backData()" />
+		</div>
+
+		<!-- Set the display of this container to none so we can
+     add it programmatically to `legendControl` -->
+<div id='legend' >
+  <p>Number of Executions state by state</p>
+  <nav class='legend clearfix'>
+    <span style='background:#F0F0F0;'></span>
+    <span style='background:#EDF8E9;'></span>
+    <span style='background:#BAE4B3;'></span>
+    <span style='background:#74C476;'></span>
+    <span style='background:#006D2C;'></span>
+    <label>0</label>
+    <label>40%</label>
+    <label>60%</label>
+    <label>80%</label>
+    <label>100%</label>
+    <small>Source: <a href="http://www.deathpenaltyinfo.org/state_by_state">Death Penalty Information Center</a></small>
+</div>
+<div id='map' class='dark'></div>
+
+		<script type="text/javascript">
+
+			//Width and height
+			var w = 500;
+			var h = 300;
+
+			//Define map projection
+			var projection = d3.geo.albersUsa()
+								   .translate([w/2, h/2])
+								   .scale([500]);
+
+			//Define path generator
+			var path = d3.geo.path()
+							 .projection(projection);
+							 
+			//Define quantize scale to sort data values into buckets of color
+			var color = d3.scale.quantize()
+				.range(["rgb(237,248,233)","rgb(186,228,179)","rgb(116,196,118)","rgb(49,163,84)","rgb(0,109,44)"]);
+								//Colors taken from colorbrewer.js, included in the D3 download
+
+			//Create SVG element
+			var svg = d3.select("body")
+						.append("svg")
+						.attr("width", w)
+						.attr("height", h);
+
+			//Load in deathpenalty data
+			d3.csv("since1976.csv", function(data) {
+
+				//Set input domain for color scale
+				color.domain([
+					d3.min(data, function(d) { return d.value; }), 
+					d3.max(data, function(d) { return d.value; })
+				]);
+
+				//Load in GeoJSON data
+				d3.json("us-states.json", function(json) {
+
+					//Merge the ag. data and GeoJSON
+					//Loop through once for each ag. data value
+					for (var i = 0; i < data.length; i++) {
+				
+						//Grab state name
+						var dataState = data[i].state;
+						
+						//Grab data value, and convert from string to float
+						var dataValue = parseFloat(data[i].value);
+				
+						//Find the corresponding state inside the GeoJSON
+						for (var j = 0; j < json.features.length; j++) {
+						
+							var jsonState = json.features[j].properties.name;
+				
+							if (dataState == jsonState) {
+						
+								//Copy the data value into the JSON
+								json.features[j].properties.value = dataValue;
+								
+								//Stop looking through the JSON
+								break;
+								
+							}
+						}		
+					}
+
+					//Bind data and create one path per GeoJSON feature
+					svg.selectAll("path")
+					   .data(json.features)
+					   .enter()
+					   .append("path")
+					   .attr("d", path)
+					   .style("fill", function(d) {
+					   		//Get data value
+					   		var value = d.properties.value;
+					   		
+					   		if (value) {
+					   			//If value exists…
+						   		return color(value);
+					   		} else {
+					   			//If value is undefined…
+						   		return "#f0f0f0";
+					   		}
+					   })
+					   .style("stroke-width", 1)
+					   .style("stroke", "white")
+
+
+					   .call(d3.helper.tooltip(
+				            function(d, i){
+				              return "<b>"+d.properties.name +"</b>"+"<br/>"+"<span>Number of Executions: </span>"+ "<b>"+d.properties.value;
+				            }
+				        ));
+			
+				});
+			
+			});
+
+		// ** Update data section (Called from the onclick)
+		function updateData() {
+			// Get the data again
+		    d3.csv("before1976.csv", function(data) {
+		       color.domain([
+							d3.min(data, function(d) { return d.value; }), 
+							d3.max(data, function(d) { return d.value; })
+						]);
+		       d3.json("us-states.json", function(json) {
+
+							//Merge the ag. data and GeoJSON
+							//Loop through once for each ag. data value
+							for (var i = 0; i < data.length; i++) {
+						
+								//Grab state name
+								var dataState = data[i].state;
+								
+								//Grab data value, and convert from string to float
+								var dataValue = parseFloat(data[i].value);
+						
+								//Find the corresponding state inside the GeoJSON
+								for (var j = 0; j < json.features.length; j++) {
+								
+									var jsonState = json.features[j].properties.name;
+						
+									if (dataState == jsonState) {
+								
+										//Copy the data value into the JSON
+										json.features[j].properties.value = dataValue;
+										
+										//Stop looking through the JSON
+										break;
+										
+									}
+								}		
+							}
+
+							//Bind data and create one path per GeoJSON feature
+							svg.selectAll("path")
+							   .data(json.features)
+							   .attr("d", path)
+							   .transition()
+							   .style("fill", function(d) {
+							   		//Get data value
+							   		var value = d.properties.value;
+							   		
+							   		if (value) {
+							   			//If value exists…
+								   		return color(value);
+							   		} else {
+							   			//If value is undefined…
+								   		return "#f0f0f0";
+							   		}
+							   });
+					
+						});
+					
+					});
+		}
+
+		function backData() {
+			// Get the data again
+		    d3.csv("since1976.csv", function(data) {
+		       color.domain([
+							d3.min(data, function(d) { return d.value; }), 
+							d3.max(data, function(d) { return d.value; })
+						]);
+		       d3.json("us-states.json", function(json) {
+
+							//Merge the ag. data and GeoJSON
+							//Loop through once for each ag. data value
+							for (var i = 0; i < data.length; i++) {
+						
+								//Grab state name
+								var dataState = data[i].state;
+								
+								//Grab data value, and convert from string to float
+								var dataValue = parseFloat(data[i].value);
+						
+								//Find the corresponding state inside the GeoJSON
+								for (var j = 0; j < json.features.length; j++) {
+								
+									var jsonState = json.features[j].properties.name;
+						
+									if (dataState == jsonState) {
+								
+										//Copy the data value into the JSON
+										json.features[j].properties.value = dataValue;
+										
+										//Stop looking through the JSON
+										break;
+										
+									}
+								}		
+							}
+
+							//Bind data and create one path per GeoJSON feature
+							svg.selectAll("path")
+							   .data(json.features)
+							   .attr("d", path)
+							   .transition()
+							   .style("fill", function(d) {
+							   		//Get data value
+							   		var value = d.properties.value;
+							   		
+							   		if (value) {
+							   			//If value exists…
+								   		return color(value);
+							   		} else {
+							   			//If value is undefined…
+								   		return "#f0f0f0";
+							   		}
+							   });
+					
+						});
+					
+					});
+		}
+
+
+
+
+			
+		</script>
+	</body>
+</html>
